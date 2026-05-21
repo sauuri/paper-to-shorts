@@ -2,7 +2,7 @@ import os
 import base64
 import numpy as np
 from openai import OpenAI
-from moviepy import AudioFileClip, ImageClip, concatenate_videoclips, CompositeVideoClip
+from moviepy import AudioFileClip, AudioArrayClip, ImageClip, concatenate_videoclips, CompositeVideoClip, CompositeAudioClip
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 from app.config import settings
 
@@ -62,6 +62,54 @@ def _apply_gradient(img: Image.Image, top_alpha: int, bottom_alpha: int) -> Imag
         a = int(bottom_alpha * (y - HEIGHT // 2) / (HEIGHT // 2))
         d.line([(0, y), (WIDTH, y)], fill=(0, 0, 0, a))
     return Image.alpha_composite(img.convert("RGBA"), grad)
+
+
+_BGM_SETTINGS = {
+    "dark": {
+        # 낮은 단조 ambient pad (Am 화음 저음역)
+        "freqs": [55.0, 65.41, 82.41, 110.0],
+        "harmonics": 0.35,
+        "lfo_rate": 0.18,
+        "vol": 0.11,
+    },
+    "bright": {
+        # 밝은 장조 ambient pad (C 화음)
+        "freqs": [65.41, 98.0, 130.81, 164.81],
+        "harmonics": 0.25,
+        "lfo_rate": 0.28,
+        "vol": 0.13,
+    },
+}
+
+
+def _generate_bgm(duration: float, mood: str) -> AudioArrayClip:
+    cfg = _BGM_SETTINGS.get(mood, _BGM_SETTINGS["dark"])
+    sr = 44100
+    n = int(sr * duration)
+    t = np.linspace(0, duration, n, endpoint=False)
+
+    audio = np.zeros(n)
+    for freq in cfg["freqs"]:
+        audio += np.sin(2 * np.pi * freq * t)
+        audio += cfg["harmonics"] * np.sin(2 * np.pi * freq * 2 * t)
+        audio += cfg["harmonics"] * 0.5 * np.sin(2 * np.pi * freq * 3 * t)
+
+    # 느린 tremolo (볼륨 흔들림)
+    audio *= 0.75 + 0.25 * np.sin(2 * np.pi * cfg["lfo_rate"] * t)
+
+    # 페이드 인/아웃
+    fade = min(int(sr * 3), n // 4)
+    audio[:fade] *= np.linspace(0, 1, fade)
+    audio[-fade:] *= np.linspace(1, 0, fade)
+
+    # 볼륨 정규화
+    peak = np.max(np.abs(audio))
+    if peak > 0:
+        audio = audio / peak * cfg["vol"]
+
+    # 스테레오 (AudioArrayClip: shape = (n_samples, 2))
+    stereo = np.stack([audio, audio], axis=1).astype(np.float32)
+    return AudioArrayClip(stereo, fps=sr)
 
 
 _NOIR_PREFIX = (
@@ -288,7 +336,15 @@ def create_video(
 
         clips.append(CompositeVideoClip([bg, overlay]))
 
-    video = concatenate_videoclips(clips).with_audio(audio)
+    # BGM 믹싱 (나레이션 유지, BGM은 낮은 볼륨)
+    try:
+        bgm = _generate_bgm(total_duration, mood)
+        mixed_audio = CompositeAudioClip([audio, bgm])
+    except Exception as e:
+        print(f"[bgm] mix failed, using narration only: {e}")
+        mixed_audio = audio
+
+    video = concatenate_videoclips(clips).with_audio(mixed_audio)
     video.write_videofile(output_path, fps=30, codec="libx264", audio_codec="aac", logger=None)
 
     for p in generated_paths:
