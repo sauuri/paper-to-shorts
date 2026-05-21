@@ -10,7 +10,7 @@ def generate_audio(text: str, output_path: str) -> str:
         model=settings.tts_model,
         voice=settings.tts_voice,
         input=text,
-        speed=1.1,
+        speed=1.05,
     )
 
     response.stream_to_file(output_path)

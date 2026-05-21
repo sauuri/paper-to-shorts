@@ -64,17 +64,21 @@ def _apply_gradient(img: Image.Image, top_alpha: int, bottom_alpha: int) -> Imag
 def _generate_scene_image(prompt: str, output_path: str) -> bool:
     try:
         client = OpenAI(api_key=settings.openai_api_key)
-        full_prompt = (
-            f"Cinematic vertical background for YouTube Shorts. Theme: {prompt}. "
-            "Style: dramatic moody lighting, dark atmosphere, high contrast, "
-            "photorealistic, no text, no faces, deep depth of field, "
-            "professional cinematography, dark color grading"
-        )
+        # image_prompts에서 온 경우 prefix가 이미 포함돼 있음
+        # 그렇지 않으면 fallback 스타일 적용
+        if "Cinematic" in prompt or "cinematic" in prompt:
+            full_prompt = prompt
+        else:
+            full_prompt = (
+                "Cinematic noir, dark dramatic lighting, high contrast, "
+                "photorealistic, no text, no faces, 9:16 vertical, moody atmosphere — "
+                f"{prompt}"
+            )
         response = client.images.generate(
             model="gpt-image-1",
             prompt=full_prompt,
             size="1024x1536",
-            quality="medium",
+            quality="high",
             n=1,
         )
         data = base64.b64decode(response.data[0].b64_json)
@@ -240,8 +244,17 @@ def create_video(
         + [(outro_dur, "outro", None)]
     )
 
-    # Build backgrounds
-    scene_prompts = [script["title"]] + points + [script["title"]]
+    # scene별 이미지 프롬프트 — 스크립트에 있으면 우선 사용, 없으면 제목/포인트 텍스트 fallback
+    raw_img_prompts = script.get("image_prompts", [])
+    scene_prompts = []
+    for i in range(len(points) + 1):  # title + 5 points
+        if i < len(raw_img_prompts) and raw_img_prompts[i].strip():
+            scene_prompts.append(raw_img_prompts[i])
+        elif i == 0:
+            scene_prompts.append(script["title"])
+        else:
+            scene_prompts.append(points[i - 1])
+
     generated_paths = []
 
     clips = []
