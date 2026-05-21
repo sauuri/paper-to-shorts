@@ -227,6 +227,10 @@
     <div class="action-row">
       <a id="download-link" class="dl-btn" download>⬇ 다운로드</a>
     </div>
+    <div class="info-box" id="hashtag-box" style="display:none">
+      <div style="font-size:11px;color:#666;margin-bottom:8px;">해시태그 (클릭하여 복사)</div>
+      <div id="res-hashtags" style="font-size:14px;line-height:2;color:#6366f1;cursor:pointer;" title="클릭하면 복사됩니다"></div>
+    </div>
     <div class="saved-path" id="saved-path" style="display:none"></div>
   </div>
 </div>
@@ -239,9 +243,20 @@
   let selectedFile = null;
   let selectedImages = [];
 
+  let isGenerating = false;
+
+  function setGenerating(val) {
+    isGenerating = val;
+    document.querySelectorAll(".tab").forEach(t => {
+      t.style.pointerEvents = val ? "none" : "";
+      t.style.opacity = val ? "0.4" : "";
+    });
+  }
+
   // Tab switching
   document.querySelectorAll(".tab").forEach(tab => {
     tab.addEventListener("click", () => {
+      if (isGenerating) return;
       activeTab = tab.dataset.tab;
       document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
       tab.classList.add("active");
@@ -386,6 +401,7 @@
 
   // Generate
   genBtn.addEventListener("click", async () => {
+    setGenerating(true);
     genBtn.disabled = true;
     result.style.display = "none";
     progress.style.display = "block";
@@ -448,12 +464,27 @@
         sp.style.display = "none";
       }
 
+      const hashBox = document.getElementById("hashtag-box");
+      const hashEl = document.getElementById("res-hashtags");
+      if (data.script.hashtags && data.script.hashtags.length) {
+        hashEl.textContent = data.script.hashtags.join(" ");
+        hashBox.style.display = "block";
+        hashEl.onclick = () => {
+          navigator.clipboard.writeText(data.script.hashtags.join(" "));
+          hashEl.textContent = "✅ 복사됐어!";
+          setTimeout(() => { hashEl.textContent = data.script.hashtags.join(" "); }, 1800);
+        };
+      } else {
+        hashBox.style.display = "none";
+      }
+
       result.style.display = "block";
     } catch (err) {
       finishSteps();
       progress.style.display = "none";
       alert("서버 오류가 발생했습니다.");
     } finally {
+      setGenerating(false);
       updateBtnState();
     }
   });

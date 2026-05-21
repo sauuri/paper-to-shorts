@@ -181,23 +181,36 @@ def _make_point_overlay(index: int, total: int, point: str, duration: float) -> 
     return ImageClip(np.array(base)).with_duration(duration)
 
 
-def _make_outro_overlay(title: str, duration: float) -> ImageClip:
+def _make_outro_overlay(title: str, question: str, duration: float) -> ImageClip:
     base = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
     base = _apply_gradient(base, top_alpha=200, bottom_alpha=250)
     draw = ImageDraw.Draw(base)
 
-    # 중앙 CTA
     cx = WIDTH // 2
-    tf = _get_font(56, bold=True)
-    for i, line in enumerate(["구독과 좋아요", "잊지 마세요 👍"]):
-        bb = draw.textbbox((0, 0), line, font=tf)
-        _draw_text_shadow(draw, (cx - (bb[2] - bb[0]) // 2, HEIGHT // 2 - 80 + i * 80), line, tf, WHITE)
 
     # 제목 recap
-    rf = _get_font(36)
+    rf = _get_font(38)
     recap = f"📌 {title}"
     rb = draw.textbbox((0, 0), recap, font=rf)
-    draw.text((cx - (rb[2] - rb[0]) // 2, HEIGHT // 2 + 200), recap, font=rf, fill=(200, 200, 255, 220))
+    draw.text((cx - (rb[2] - rb[0]) // 2, HEIGHT // 2 - 180), recap, font=rf, fill=(180, 180, 255, 220))
+
+    # 구분선
+    draw.line([(120, HEIGHT // 2 - 110), (WIDTH - 120, HEIGHT // 2 - 110)], fill=(255, 255, 255, 30), width=1)
+
+    # 질문 텍스트
+    qf = _get_font(60, bold=True)
+    q_lines = _wrap_text(draw, question, WIDTH - 160, qf)
+    y = HEIGHT // 2 - 60
+    for line in q_lines[:3]:
+        qb = draw.textbbox((0, 0), line, font=qf)
+        _draw_text_shadow(draw, (cx - (qb[2] - qb[0]) // 2, y), line, qf, WHITE)
+        y += (qb[3] - qb[1]) + 12
+
+    # 댓글 유도 서브텍스트
+    sf = _get_font(34)
+    sub = "댓글로 의견 남겨줘 💬"
+    sb = draw.textbbox((0, 0), sub, font=sf)
+    draw.text((cx - (sb[2] - sb[0]) // 2, y + 24), sub, font=sf, fill=(160, 160, 210, 200))
 
     return ImageClip(np.array(base)).with_duration(duration)
 
@@ -252,7 +265,7 @@ def create_video(
         elif seg_type == "point":
             overlay = _make_point_overlay(seg_idx_val, len(points), points[seg_idx_val], seg_dur)
         else:
-            overlay = _make_outro_overlay(script["title"], seg_dur)
+            overlay = _make_outro_overlay(script["title"], script.get("outro_question", "어떻게 생각해?"), seg_dur)
 
         clips.append(CompositeVideoClip([bg, overlay]))
 
