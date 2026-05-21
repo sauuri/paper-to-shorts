@@ -146,7 +146,7 @@ def _make_title_overlay(title: str, hook: str, duration: float) -> ImageClip:
     # 하단 구분선
     draw.line([(60, HEIGHT - 155), (WIDTH - 60, HEIGHT - 155)], fill=(255, 255, 255, 40), width=1)
     sf = _get_font(32)
-    draw.text((60, HEIGHT - 140), "▶  영상 계속 보기", font=sf, fill=(180, 180, 220, 200))
+    draw.text((60, HEIGHT - 140), "  영상 계속 보기", font=sf, fill=(180, 180, 220, 200))
 
     return ImageClip(np.array(base)).with_duration(duration)
 
@@ -197,7 +197,7 @@ def _make_outro_overlay(title: str, question: str, duration: float) -> ImageClip
 
     # 제목 recap
     rf = _get_font(38)
-    recap = f"📌 {title}"
+    recap = f"[ {title} ]"
     rb = draw.textbbox((0, 0), recap, font=rf)
     draw.text((cx - (rb[2] - rb[0]) // 2, HEIGHT // 2 - 180), recap, font=rf, fill=(180, 180, 255, 220))
 
@@ -215,7 +215,7 @@ def _make_outro_overlay(title: str, question: str, duration: float) -> ImageClip
 
     # 댓글 유도 서브텍스트
     sf = _get_font(34)
-    sub = "댓글로 의견 남겨줘 💬"
+    sub = "댓글로 의견 남겨줘"
     sb = draw.textbbox((0, 0), sub, font=sf)
     draw.text((cx - (sb[2] - sb[0]) // 2, y + 24), sub, font=sf, fill=(160, 160, 210, 200))
 
