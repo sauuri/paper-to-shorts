@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     tts_voice: str = "nova"
     output_dir: str = "output"
     pexels_api_key: str = ""
+    default_save_dir: str = "/Users/jhlee/Documents/유튜브 숏츠"
 
     class Config:
         env_file = ".env"

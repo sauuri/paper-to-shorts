@@ -37,6 +37,8 @@ def _save_to_dir(src: str, title: str, save_dir: str) -> str | None:
 
 
 async def _pipeline(content: str, save_dir: str = "", bg_images: list[str] | None = None) -> dict:
+    if not save_dir:
+        save_dir = settings.default_save_dir
     job_id = str(uuid.uuid4())[:8]
     audio_path = f"{settings.output_dir}/{job_id}.mp3"
     video_path = f"{settings.output_dir}/{job_id}.mp4"
