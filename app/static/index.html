@@ -72,6 +72,15 @@
     .save-row input { flex: 1; }
     .save-hint { font-size: 11px; color: #444; margin-top: 5px; }
 
+    .mood-row { display: flex; gap: 8px; }
+    .mood-btn {
+      flex: 1; padding: 10px; background: #0a0a14;
+      border: 1.5px solid #1e1e30; border-radius: 9px;
+      color: #666; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.18s;
+    }
+    .mood-btn.active[data-mood="dark"]   { border-color: #6366f1; color: #fff; background: #15153a; }
+    .mood-btn.active[data-mood="bright"] { border-color: #22c55e; color: #fff; background: #0f1e14; }
+
     /* Generate button */
     .gen-btn {
       width: 100%; padding: 14px;
@@ -183,6 +192,13 @@
     <textarea id="caption-input" placeholder="이미지와 관련된 설명이나 만들고 싶은 영상 주제를 입력하세요..."></textarea>
   </div>
 
+  <!-- Mood -->
+  <div class="field-label">분위기</div>
+  <div class="mood-row">
+    <button class="mood-btn active" data-mood="dark">어둠 / 사건·범죄</button>
+    <button class="mood-btn" data-mood="bright">밝음 / 긍정·정보</button>
+  </div>
+
   <!-- Save path -->
   <div class="field-label">저장 경로 (선택)</div>
   <input id="save-dir" type="text" value="/Users/jhlee/Documents/유튜브 숏츠" />
@@ -244,6 +260,16 @@
   let selectedImages = [];
 
   let isGenerating = false;
+  let selectedMood = "dark";
+
+  document.querySelectorAll(".mood-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      if (isGenerating) return;
+      selectedMood = btn.dataset.mood;
+      document.querySelectorAll(".mood-btn").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+    });
+  });
 
   function setGenerating(val) {
     isGenerating = val;
@@ -418,6 +444,7 @@
         const fd = new FormData();
         fd.append("file", selectedFile);
         fd.append("save_dir", saveDir);
+        fd.append("mood", selectedMood);
         res = await fetch("/generate/pdf", { method: "POST", body: fd });
 
       } else if (activeTab === "url") {
@@ -425,6 +452,7 @@
         const fd = new FormData();
         fd.append("url", url);
         fd.append("save_dir", saveDir);
+        fd.append("mood", selectedMood);
         res = await fetch("/generate/url", { method: "POST", body: fd });
 
       } else {
@@ -432,6 +460,7 @@
         selectedImages.forEach(f => fd.append("files", f));
         fd.append("caption", document.getElementById("caption-input").value);
         fd.append("save_dir", saveDir);
+        fd.append("mood", selectedMood);
         res = await fetch("/generate/images", { method: "POST", body: fd });
       }
 

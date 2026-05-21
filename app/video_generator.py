@@ -7,10 +7,13 @@ from PIL import Image, ImageDraw, ImageFont, ImageFilter
 from app.config import settings
 
 WIDTH, HEIGHT = 1080, 1920
-ACCENT = (99, 102, 241, 255)      # indigo
-ACCENT_DIM = (60, 63, 180, 200)
 WHITE = (255, 255, 255, 255)
 SHADOW = (0, 0, 0, 170)
+
+MOOD_PALETTE = {
+    "dark":   {"accent": (99, 102, 241, 255),  "sub": (210, 210, 255, 255), "bg": (8, 8, 18)},
+    "bright": {"accent": (34, 197, 94, 255),   "sub": (255, 255, 220, 255), "bg": (15, 25, 15)},
+}
 
 
 def _get_font(size: int, bold: bool = False):
@@ -115,58 +118,56 @@ def _make_fallback_bg(duration: float) -> ImageClip:
     return ImageClip(img).with_duration(duration)
 
 
-def _make_title_overlay(title: str, hook: str, duration: float) -> ImageClip:
+def _make_title_overlay(title: str, hook: str, duration: float, mood: str = "dark") -> ImageClip:
+    pal = MOOD_PALETTE.get(mood, MOOD_PALETTE["dark"])
+    accent, sub = pal["accent"], pal["sub"]
+
     base = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
     base = _apply_gradient(base, top_alpha=160, bottom_alpha=240)
     draw = ImageDraw.Draw(base)
 
-    # 좌측 강조선
-    draw.rectangle([(60, HEIGHT - 590), (68, HEIGHT - 180)], fill=ACCENT)
-
-    # AI SUMMARY 레이블
+    draw.rectangle([(60, HEIGHT - 590), (68, HEIGHT - 180)], fill=accent)
     lf = _get_font(30, bold=True)
-    draw.rounded_rectangle([(80, HEIGHT - 600), (262, HEIGHT - 566)], radius=6, fill=ACCENT)
+    draw.rounded_rectangle([(80, HEIGHT - 600), (262, HEIGHT - 566)], radius=6, fill=accent)
     draw.text((96, HEIGHT - 598), "AI SUMMARY", font=lf, fill=WHITE)
 
-    # 제목
     tf = _get_font(74, bold=True)
-    lines = _wrap_text(draw, title, WIDTH - 160, tf)
     y = HEIGHT - 545
-    for line in lines[:3]:
+    for line in _wrap_text(draw, title, WIDTH - 160, tf)[:3]:
         _draw_text_shadow(draw, (80, y), line, tf, WHITE)
         y += draw.textbbox((0, 0), line, font=tf)[3] + 10
 
-    # 후크
     hf = _get_font(46)
     y += 18
     for line in _wrap_text(draw, hook, WIDTH - 160, hf)[:2]:
-        _draw_text_shadow(draw, (80, y), line, hf, (210, 210, 255, 255))
+        _draw_text_shadow(draw, (80, y), line, hf, sub)
         y += draw.textbbox((0, 0), line, font=hf)[3] + 8
 
-    # 하단 구분선
     draw.line([(60, HEIGHT - 155), (WIDTH - 60, HEIGHT - 155)], fill=(255, 255, 255, 40), width=1)
     sf = _get_font(32)
-    draw.text((60, HEIGHT - 140), "  영상 계속 보기", font=sf, fill=(180, 180, 220, 200))
+    draw.text((60, HEIGHT - 140), "  영상 계속 보기", font=sf, fill=(*sub[:3], 180))
 
     return ImageClip(np.array(base)).with_duration(duration)
 
 
-def _make_point_overlay(index: int, total: int, point: str, duration: float) -> ImageClip:
+def _make_point_overlay(index: int, total: int, point: str, duration: float, mood: str = "dark") -> ImageClip:
+    pal = MOOD_PALETTE.get(mood, MOOD_PALETTE["dark"])
+    accent = pal["accent"]
+    inactive = (70, 90, 70, 180) if mood == "bright" else (70, 70, 90, 180)
+
     base = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
     base = _apply_gradient(base, top_alpha=140, bottom_alpha=235)
     draw = ImageDraw.Draw(base)
 
-    # 진행 바 (상단)
     bar_w = (WIDTH - 120) // total
     for i in range(total):
         x = 60 + i * (bar_w + 5)
-        color = ACCENT if i <= index else (70, 70, 90, 180)
-        draw.rounded_rectangle([(x, 58), (x + bar_w, 70)], radius=4, fill=color)
+        draw.rounded_rectangle([(x, 58), (x + bar_w, 70)], radius=4,
+                                fill=accent if i <= index else inactive)
 
-    # 원형 번호 뱃지
     nf = _get_font(50, bold=True)
     bx, by = 60, HEIGHT - 580
-    draw.ellipse([(bx, by), (bx + 96, by + 96)], fill=ACCENT)
+    draw.ellipse([(bx, by), (bx + 96, by + 96)], fill=accent)
     nt = str(index + 1)
     nb = draw.textbbox((0, 0), nt, font=nf)
     draw.text(
@@ -174,21 +175,22 @@ def _make_point_overlay(index: int, total: int, point: str, duration: float) -> 
         nt, font=nf, fill=WHITE
     )
 
-    # 포인트 텍스트
     pf = _get_font(66, bold=True)
     y = HEIGHT - 462
     for line in _wrap_text(draw, point, WIDTH - 170, pf)[:3]:
         _draw_text_shadow(draw, (80, y), line, pf, WHITE)
         y += draw.textbbox((0, 0), line, font=pf)[3] + 10
 
-    # 진행 표시 텍스트
     cf = _get_font(32)
-    draw.text((WIDTH - 160, HEIGHT - 100), f"{index + 1} / {total}", font=cf, fill=(180, 180, 200, 200))
+    draw.text((WIDTH - 160, HEIGHT - 100), f"{index + 1} / {total}", font=cf, fill=(180, 200, 180, 200) if mood == "bright" else (180, 180, 200, 200))
 
     return ImageClip(np.array(base)).with_duration(duration)
 
 
-def _make_outro_overlay(title: str, question: str, duration: float) -> ImageClip:
+def _make_outro_overlay(title: str, question: str, duration: float, mood: str = "dark") -> ImageClip:
+    pal = MOOD_PALETTE.get(mood, MOOD_PALETTE["dark"])
+    sub = pal["sub"]
+
     base = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
     base = _apply_gradient(base, top_alpha=200, bottom_alpha=250)
     draw = ImageDraw.Draw(base)
@@ -213,11 +215,10 @@ def _make_outro_overlay(title: str, question: str, duration: float) -> ImageClip
         _draw_text_shadow(draw, (cx - (qb[2] - qb[0]) // 2, y), line, qf, WHITE)
         y += (qb[3] - qb[1]) + 12
 
-    # 댓글 유도 서브텍스트
     sf = _get_font(34)
-    sub = "댓글로 의견 남겨줘"
-    sb = draw.textbbox((0, 0), sub, font=sf)
-    draw.text((cx - (sb[2] - sb[0]) // 2, y + 24), sub, font=sf, fill=(160, 160, 210, 200))
+    comment_text = "댓글로 의견 남겨줘"
+    sb = draw.textbbox((0, 0), comment_text, font=sf)
+    draw.text((cx - (sb[2] - sb[0]) // 2, y + 24), comment_text, font=sf, fill=(*sub[:3], 180))
 
     return ImageClip(np.array(base)).with_duration(duration)
 
@@ -227,6 +228,7 @@ def create_video(
     audio_path: str,
     output_path: str,
     bg_images: list[str] | None = None,
+    mood: str = "dark",
 ) -> str:
     """
     bg_images: user-supplied image paths (used as backgrounds instead of AI generation).
@@ -278,11 +280,11 @@ def create_video(
 
         # --- Overlay ---
         if seg_type == "title":
-            overlay = _make_title_overlay(script["title"], script["hook"], seg_dur)
+            overlay = _make_title_overlay(script["title"], script["hook"], seg_dur, mood)
         elif seg_type == "point":
-            overlay = _make_point_overlay(seg_idx_val, len(points), points[seg_idx_val], seg_dur)
+            overlay = _make_point_overlay(seg_idx_val, len(points), points[seg_idx_val], seg_dur, mood)
         else:
-            overlay = _make_outro_overlay(script["title"], script.get("outro_question", "어떻게 생각해?"), seg_dur)
+            overlay = _make_outro_overlay(script["title"], script.get("outro_question", "어떻게 생각해?"), seg_dur, mood)
 
         clips.append(CompositeVideoClip([bg, overlay]))
 

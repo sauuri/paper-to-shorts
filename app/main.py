@@ -56,7 +56,7 @@ async def _run_sync(fn, *args, **kwargs):
     return await loop.run_in_executor(None, partial(fn, *args, **kwargs))
 
 
-async def _pipeline(content: str, save_dir: str = "", bg_images: list[str] | None = None) -> dict:
+async def _pipeline(content: str, save_dir: str = "", bg_images: list[str] | None = None, mood: str = "dark") -> dict:
     if not save_dir:
         save_dir = settings.default_save_dir
 
@@ -65,14 +65,13 @@ async def _pipeline(content: str, save_dir: str = "", bg_images: list[str] | Non
     video_path = f"{settings.output_dir}/{job_id}.mp4"
 
     try:
-        # 블로킹 작업들을 executor에서 실행 (이벤트 루프 블로킹 방지)
         if bg_images:
-            script = await _run_sync(generate_script_from_images, bg_images, content)
+            script = await _run_sync(generate_script_from_images, bg_images, content, mood)
         else:
-            script = await _run_sync(generate_script, content)
+            script = await _run_sync(generate_script, content, mood)
 
         await _run_sync(generate_audio, script["narration"], audio_path)
-        await _run_sync(create_video, script, audio_path, video_path, bg_images)
+        await _run_sync(create_video, script, audio_path, video_path, bg_images, mood)
 
     except Exception as e:
         _cleanup(audio_path, video_path)
@@ -93,6 +92,7 @@ async def _pipeline(content: str, save_dir: str = "", bg_images: list[str] | Non
 async def generate_from_pdf(
     file: UploadFile = File(...),
     save_dir: str = Form(""),
+    mood: str = Form("dark"),
 ):
     if not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="PDF 파일만 업로드 가능합니다.")
@@ -112,7 +112,7 @@ async def generate_from_pdf(
         if not content.strip():
             raise HTTPException(status_code=400, detail="PDF 내용이 비어있습니다.")
 
-        return await _pipeline(content, save_dir)
+        return await _pipeline(content, save_dir, mood=mood)
     except HTTPException:
         raise
     except Exception as e:
@@ -125,6 +125,7 @@ async def generate_from_pdf(
 async def generate_from_url(
     url: str = Form(...),
     save_dir: str = Form(""),
+    mood: str = Form("dark"),
 ):
     if not url.startswith("http"):
         raise HTTPException(status_code=400, detail="올바른 URL을 입력해주세요.")
@@ -132,7 +133,7 @@ async def generate_from_url(
         content = await _run_sync(extract_from_url, url)
         if not content.strip():
             raise HTTPException(status_code=400, detail="URL에서 내용을 추출할 수 없습니다.")
-        return await _pipeline(content, save_dir)
+        return await _pipeline(content, save_dir, mood=mood)
     except HTTPException:
         raise
     except Exception as e:
@@ -144,6 +145,7 @@ async def generate_from_images(
     files: list[UploadFile] = File(...),
     caption: str = Form(""),
     save_dir: str = Form(""),
+    mood: str = Form("dark"),
 ):
     if not files:
         raise HTTPException(status_code=400, detail="이미지를 업로드해주세요.")
@@ -162,7 +164,7 @@ async def generate_from_images(
                 out.write(await f.read())
             saved_paths.append(path)
 
-        return await _pipeline(caption, save_dir, bg_images=saved_paths)
+        return await _pipeline(caption, save_dir, bg_images=saved_paths, mood=mood)
     except HTTPException:
         raise
     except Exception as e:
