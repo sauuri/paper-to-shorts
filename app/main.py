@@ -32,9 +32,13 @@ def _save_to_dir(src: str, title: str, save_dir: str) -> str | None:
         expanded = os.path.expanduser(save_dir.strip())
         if not os.path.isdir(expanded):
             return None
-        safe = "".join(c for c in title if c.isalnum() or c in " _-")[:28].strip() or "shorts"
-        job_id = os.path.basename(src).split(".")[0]
-        dest = os.path.join(expanded, f"{safe}_{job_id[:6]}.mp4")
+        safe = "".join(c for c in title if c not in r'\/:*?"<>|').strip()[:40] or "shorts"
+        dest = os.path.join(expanded, f"{safe}.mp4")
+        if os.path.exists(dest):
+            base, i = dest[:-4], 2
+            while os.path.exists(f"{base}_{i}.mp4"):
+                i += 1
+            dest = f"{base}_{i}.mp4"
         shutil.copy2(src, dest)
         return dest
     except Exception as e:
