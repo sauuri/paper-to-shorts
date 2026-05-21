@@ -61,37 +61,40 @@ def _apply_gradient(img: Image.Image, top_alpha: int, bottom_alpha: int) -> Imag
     return Image.alpha_composite(img.convert("RGBA"), grad)
 
 
-def _generate_scene_image(prompt: str, output_path: str) -> bool:
-    try:
-        client = OpenAI(api_key=settings.openai_api_key)
-        # image_prompts에서 온 경우 prefix가 이미 포함돼 있음
-        # 그렇지 않으면 fallback 스타일 적용
-        if "Cinematic" in prompt or "cinematic" in prompt:
-            full_prompt = prompt
-        else:
-            full_prompt = (
-                "Cinematic noir, dark dramatic lighting, high contrast, "
-                "photorealistic, no text, no faces, 9:16 vertical, moody atmosphere — "
-                f"{prompt}"
+_NOIR_PREFIX = (
+    "Cinematic noir, dark dramatic lighting, high contrast, "
+    "photorealistic, no text, no faces, 9:16 vertical, moody atmosphere — "
+)
+
+
+def _generate_scene_image(prompt: str, output_path: str, retries: int = 2) -> bool:
+    full_prompt = prompt if ("Cinematic" in prompt or "cinematic" in prompt) else f"{_NOIR_PREFIX}{prompt}"
+    client = OpenAI(api_key=settings.openai_api_key)
+    for attempt in range(retries + 1):
+        try:
+            response = client.images.generate(
+                model="gpt-image-1",
+                prompt=full_prompt,
+                size="1024x1536",
+                quality="high",
+                n=1,
             )
-        response = client.images.generate(
-            model="gpt-image-1",
-            prompt=full_prompt,
-            size="1024x1536",
-            quality="high",
-            n=1,
-        )
-        data = base64.b64decode(response.data[0].b64_json)
-        with open(output_path, "wb") as f:
-            f.write(data)
-        return True
-    except Exception as e:
-        print(f"[image-gen] failed: {e}")
-        return False
+            data = base64.b64decode(response.data[0].b64_json)
+            with open(output_path, "wb") as f:
+                f.write(data)
+            return True
+        except Exception as e:
+            print(f"[image-gen] attempt {attempt + 1} failed: {e}")
+            if attempt < retries:
+                import time; time.sleep(2)
+    return False
 
 
 def _make_bg_from_image(img_path: str, duration: float) -> ImageClip:
-    img = Image.open(img_path).convert("RGB")
+    try:
+        img = Image.open(img_path).convert("RGB")
+    except Exception:
+        return _make_fallback_bg(duration)
     ratio = HEIGHT / img.height
     new_w = int(img.width * ratio)
     img = img.resize((max(new_w, WIDTH), HEIGHT), Image.LANCZOS)
