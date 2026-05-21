@@ -265,7 +265,8 @@ def create_video(
             bg = _make_bg_from_image(img_src, seg_dur)
         else:
             gen_path = f"{settings.output_dir}/scene_{seg_idx}.png"
-            ok = _generate_scene_image(scene_prompts[seg_idx], gen_path)
+            prompt_idx = min(seg_idx, len(scene_prompts) - 1)
+            ok = _generate_scene_image(scene_prompts[prompt_idx], gen_path)
             if ok:
                 generated_paths.append(gen_path)
                 bg = _make_bg_from_image(gen_path, seg_dur)
