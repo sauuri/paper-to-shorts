@@ -1,11 +1,16 @@
 import os
-import requests
+import base64
 import numpy as np
-from moviepy import AudioFileClip, VideoFileClip, ImageClip, concatenate_videoclips, CompositeVideoClip
-from PIL import Image, ImageDraw, ImageFont
+from openai import OpenAI
+from moviepy import AudioFileClip, ImageClip, concatenate_videoclips, CompositeVideoClip
+from PIL import Image, ImageDraw, ImageFont, ImageFilter
 from app.config import settings
 
 WIDTH, HEIGHT = 1080, 1920
+ACCENT = (99, 102, 241, 255)      # indigo
+ACCENT_DIM = (60, 63, 180, 200)
+WHITE = (255, 255, 255, 255)
+SHADOW = (0, 0, 0, 170)
 
 
 def _get_font(size: int, bold: bool = False):
@@ -25,12 +30,10 @@ def _get_font(size: int, bold: bool = False):
 
 def _wrap_text(draw, text, max_width, font):
     words = text.split()
-    lines = []
-    current = ""
+    lines, current = [], ""
     for word in words:
         test = f"{current} {word}".strip()
-        bbox = draw.textbbox((0, 0), test, font=font)
-        if bbox[2] - bbox[0] <= max_width:
+        if draw.textbbox((0, 0), test, font=font)[2] <= max_width:
             current = test
         else:
             if current:
@@ -41,202 +44,223 @@ def _wrap_text(draw, text, max_width, font):
     return lines
 
 
-FALLBACK_KEYWORDS = ["aerial drone", "city timelapse", "dark sky", "technology screen", "fire explosion"]
+def _draw_text_shadow(draw, pos, text, font, fill, shadow_offset=3):
+    draw.text((pos[0] + shadow_offset, pos[1] + shadow_offset), text, font=font, fill=SHADOW)
+    draw.text(pos, text, font=font, fill=fill)
 
 
-def _fetch_pexels_video(keyword: str, output_path: str) -> bool:
-    headers = {"Authorization": settings.pexels_api_key}
-    keywords_to_try = [keyword] + FALLBACK_KEYWORDS
-
-    for kw in keywords_to_try:
-        try:
-            res = requests.get(
-                "https://api.pexels.com/videos/search",
-                headers=headers,
-                params={"query": kw, "per_page": 10},
-                timeout=10,
-            )
-            if res.status_code != 200:
-                continue
-            videos = res.json().get("videos", [])
-            if not videos:
-                continue
-
-            import random
-            video = random.choice(videos[:5])
-            video_files = video.get("video_files", [])
-            hd_files = [f for f in video_files if f.get("quality") in ("hd", "sd")]
-            if not hd_files:
-                continue
-
-            url = hd_files[0]["link"]
-            r = requests.get(url, stream=True, timeout=60)
-            with open(output_path, "wb") as f:
-                for chunk in r.iter_content(chunk_size=8192):
-                    f.write(chunk)
-            return True
-
-        except Exception:
-            continue
-
-    return False
-
-
-def _make_title_overlay(title: str, hook: str, duration: float) -> ImageClip:
-    img = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(img)
-
-    # 하단 그라데이션 오버레이
+def _apply_gradient(img: Image.Image, top_alpha: int, bottom_alpha: int) -> Image.Image:
+    grad = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
+    d = ImageDraw.Draw(grad)
+    for y in range(360):
+        a = int(top_alpha * (1 - y / 360))
+        d.line([(0, y), (WIDTH, y)], fill=(0, 0, 0, a))
     for y in range(HEIGHT // 2, HEIGHT):
-        alpha = int(220 * (y - HEIGHT // 2) / (HEIGHT // 2))
-        draw.line([(0, y), (WIDTH, y)], fill=(0, 0, 0, alpha))
-
-    # 상단 얇은 그라데이션
-    for y in range(0, 200):
-        alpha = int(160 * (1 - y / 200))
-        draw.line([(0, y), (WIDTH, y)], fill=(0, 0, 0, alpha))
-
-    # 좌측 강조 바
-    draw.rectangle([(60, HEIGHT - 520), (68, HEIGHT - 200)], fill=(255, 50, 50, 255))
-
-    # BREAKING 태그
-    tag_font = _get_font(36, bold=True)
-    draw.rectangle([(80, HEIGHT - 530), (280, HEIGHT - 490)], fill=(255, 50, 50, 255))
-    draw.text((90, HEIGHT - 528), "BREAKING", font=tag_font, fill=(255, 255, 255, 255))
-
-    # 제목
-    title_font = _get_font(72, bold=True)
-    lines = _wrap_text(draw, title, WIDTH - 160, title_font)
-    y = HEIGHT - 480
-    for line in lines[:3]:
-        draw.text((80, y), line, font=title_font, fill=(255, 255, 255, 255))
-        bbox = draw.textbbox((0, 0), line, font=title_font)
-        y += (bbox[3] - bbox[1]) + 8
-
-    # 후크 문장
-    hook_font = _get_font(46)
-    hook_lines = _wrap_text(draw, hook, WIDTH - 160, hook_font)
-    y += 20
-    for line in hook_lines[:2]:
-        draw.text((80, y), line, font=hook_font, fill=(220, 220, 220, 255))
-        bbox = draw.textbbox((0, 0), line, font=hook_font)
-        y += (bbox[3] - bbox[1]) + 6
-
-    return ImageClip(np.array(img)).with_duration(duration)
+        a = int(bottom_alpha * (y - HEIGHT // 2) / (HEIGHT // 2))
+        d.line([(0, y), (WIDTH, y)], fill=(0, 0, 0, a))
+    return Image.alpha_composite(img.convert("RGBA"), grad)
 
 
-def _make_point_overlay(index: int, total: int, point: str, duration: float) -> ImageClip:
-    img = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(img)
-
-    # 하단 그라데이션
-    for y in range(HEIGHT // 2, HEIGHT):
-        alpha = int(230 * (y - HEIGHT // 2) / (HEIGHT // 2))
-        draw.line([(0, y), (WIDTH, y)], fill=(0, 0, 0, alpha))
-
-    # 상단 그라데이션
-    for y in range(0, 160):
-        alpha = int(140 * (1 - y / 160))
-        draw.line([(0, y), (WIDTH, y)], fill=(0, 0, 0, alpha))
-
-    # 상단 진행 바
-    bar_width = (WIDTH - 120) // total
-    for i in range(total):
-        x = 60 + i * (bar_width + 6)
-        color = (255, 50, 50, 255) if i <= index else (100, 100, 100, 180)
-        draw.rectangle([(x, 60), (x + bar_width, 72)], fill=color)
-
-    # 번호 뱃지
-    num_font = _get_font(44, bold=True)
-    badge_text = f"{index + 1:02d}"
-    draw.rectangle([(60, HEIGHT - 560), (160, HEIGHT - 490)], fill=(255, 50, 50, 255))
-    bbox = draw.textbbox((0, 0), badge_text, font=num_font)
-    tx = 60 + (100 - (bbox[2] - bbox[0])) // 2
-    draw.text((tx, HEIGHT - 555), badge_text, font=num_font, fill=(255, 255, 255, 255))
-
-    # 포인트 텍스트
-    point_font = _get_font(64, bold=True)
-    lines = _wrap_text(draw, point, WIDTH - 160, point_font)
-    y = HEIGHT - 470
-    for line in lines[:3]:
-        # 텍스트 그림자
-        draw.text((82, y + 2), line, font=point_font, fill=(0, 0, 0, 180))
-        draw.text((80, y), line, font=point_font, fill=(255, 255, 255, 255))
-        bbox = draw.textbbox((0, 0), line, font=point_font)
-        y += (bbox[3] - bbox[1]) + 10
-
-    return ImageClip(np.array(img)).with_duration(duration)
+def _generate_scene_image(prompt: str, output_path: str) -> bool:
+    try:
+        client = OpenAI(api_key=settings.openai_api_key)
+        full_prompt = (
+            f"Cinematic vertical background for YouTube Shorts. Theme: {prompt}. "
+            "Style: dramatic moody lighting, dark atmosphere, high contrast, "
+            "photorealistic, no text, no faces, deep depth of field, "
+            "professional cinematography, dark color grading"
+        )
+        response = client.images.generate(
+            model="gpt-image-1",
+            prompt=full_prompt,
+            size="1024x1536",
+            quality="medium",
+            n=1,
+        )
+        data = base64.b64decode(response.data[0].b64_json)
+        with open(output_path, "wb") as f:
+            f.write(data)
+        return True
+    except Exception as e:
+        print(f"[image-gen] failed: {e}")
+        return False
 
 
-def _make_bg_clip(video_path: str, duration: float) -> VideoFileClip:
-    clip = VideoFileClip(video_path)
-
-    clip_ratio = clip.w / clip.h
-    target_ratio = WIDTH / HEIGHT
-
-    if clip_ratio > target_ratio:
-        clip = clip.resized(height=HEIGHT)
-        clip = clip.cropped(x_center=clip.w / 2, y_center=HEIGHT / 2, width=WIDTH, height=HEIGHT)
+def _make_bg_from_image(img_path: str, duration: float) -> ImageClip:
+    img = Image.open(img_path).convert("RGB")
+    ratio = HEIGHT / img.height
+    new_w = int(img.width * ratio)
+    img = img.resize((max(new_w, WIDTH), HEIGHT), Image.LANCZOS)
+    if img.width > WIDTH:
+        left = (img.width - WIDTH) // 2
+        img = img.crop((left, 0, left + WIDTH, HEIGHT))
     else:
-        clip = clip.resized(width=WIDTH)
-        clip = clip.cropped(x_center=WIDTH / 2, y_center=clip.h / 2, width=WIDTH, height=HEIGHT)
-
-    if clip.duration < duration:
-        loops = int(duration / clip.duration) + 1
-        clip = concatenate_videoclips([clip] * loops)
-
-    return clip.with_subclip(0, duration)
+        padded = Image.new("RGB", (WIDTH, HEIGHT), (8, 8, 18))
+        padded.paste(img, ((WIDTH - img.width) // 2, 0))
+        img = padded
+    img = img.filter(ImageFilter.GaussianBlur(radius=1.2))
+    return ImageClip(np.array(img)).with_duration(duration)
 
 
 def _make_fallback_bg(duration: float) -> ImageClip:
     img = np.zeros((HEIGHT, WIDTH, 3), dtype=np.uint8)
-    img[:] = (10, 10, 20)
+    img[:] = (8, 8, 18)
     return ImageClip(img).with_duration(duration)
 
 
-def create_video(script: dict, audio_path: str, output_path: str) -> str:
+def _make_title_overlay(title: str, hook: str, duration: float) -> ImageClip:
+    base = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
+    base = _apply_gradient(base, top_alpha=160, bottom_alpha=240)
+    draw = ImageDraw.Draw(base)
+
+    # 좌측 강조선
+    draw.rectangle([(60, HEIGHT - 590), (68, HEIGHT - 180)], fill=ACCENT)
+
+    # AI SUMMARY 레이블
+    lf = _get_font(30, bold=True)
+    draw.rounded_rectangle([(80, HEIGHT - 600), (262, HEIGHT - 566)], radius=6, fill=ACCENT)
+    draw.text((96, HEIGHT - 598), "AI SUMMARY", font=lf, fill=WHITE)
+
+    # 제목
+    tf = _get_font(74, bold=True)
+    lines = _wrap_text(draw, title, WIDTH - 160, tf)
+    y = HEIGHT - 545
+    for line in lines[:3]:
+        _draw_text_shadow(draw, (80, y), line, tf, WHITE)
+        y += draw.textbbox((0, 0), line, font=tf)[3] + 10
+
+    # 후크
+    hf = _get_font(46)
+    y += 18
+    for line in _wrap_text(draw, hook, WIDTH - 160, hf)[:2]:
+        _draw_text_shadow(draw, (80, y), line, hf, (210, 210, 255, 255))
+        y += draw.textbbox((0, 0), line, font=hf)[3] + 8
+
+    # 하단 구분선
+    draw.line([(60, HEIGHT - 155), (WIDTH - 60, HEIGHT - 155)], fill=(255, 255, 255, 40), width=1)
+    sf = _get_font(32)
+    draw.text((60, HEIGHT - 140), "▶  영상 계속 보기", font=sf, fill=(180, 180, 220, 200))
+
+    return ImageClip(np.array(base)).with_duration(duration)
+
+
+def _make_point_overlay(index: int, total: int, point: str, duration: float) -> ImageClip:
+    base = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
+    base = _apply_gradient(base, top_alpha=140, bottom_alpha=235)
+    draw = ImageDraw.Draw(base)
+
+    # 진행 바 (상단)
+    bar_w = (WIDTH - 120) // total
+    for i in range(total):
+        x = 60 + i * (bar_w + 5)
+        color = ACCENT if i <= index else (70, 70, 90, 180)
+        draw.rounded_rectangle([(x, 58), (x + bar_w, 70)], radius=4, fill=color)
+
+    # 원형 번호 뱃지
+    nf = _get_font(50, bold=True)
+    bx, by = 60, HEIGHT - 580
+    draw.ellipse([(bx, by), (bx + 96, by + 96)], fill=ACCENT)
+    nt = str(index + 1)
+    nb = draw.textbbox((0, 0), nt, font=nf)
+    draw.text(
+        (bx + (96 - (nb[2] - nb[0])) // 2, by + (96 - (nb[3] - nb[1])) // 2),
+        nt, font=nf, fill=WHITE
+    )
+
+    # 포인트 텍스트
+    pf = _get_font(66, bold=True)
+    y = HEIGHT - 462
+    for line in _wrap_text(draw, point, WIDTH - 170, pf)[:3]:
+        _draw_text_shadow(draw, (80, y), line, pf, WHITE)
+        y += draw.textbbox((0, 0), line, font=pf)[3] + 10
+
+    # 진행 표시 텍스트
+    cf = _get_font(32)
+    draw.text((WIDTH - 160, HEIGHT - 100), f"{index + 1} / {total}", font=cf, fill=(180, 180, 200, 200))
+
+    return ImageClip(np.array(base)).with_duration(duration)
+
+
+def _make_outro_overlay(title: str, duration: float) -> ImageClip:
+    base = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
+    base = _apply_gradient(base, top_alpha=200, bottom_alpha=250)
+    draw = ImageDraw.Draw(base)
+
+    # 중앙 CTA
+    cx = WIDTH // 2
+    tf = _get_font(56, bold=True)
+    for i, line in enumerate(["구독과 좋아요", "잊지 마세요 👍"]):
+        bb = draw.textbbox((0, 0), line, font=tf)
+        _draw_text_shadow(draw, (cx - (bb[2] - bb[0]) // 2, HEIGHT // 2 - 80 + i * 80), line, tf, WHITE)
+
+    # 제목 recap
+    rf = _get_font(36)
+    recap = f"📌 {title}"
+    rb = draw.textbbox((0, 0), recap, font=rf)
+    draw.text((cx - (rb[2] - rb[0]) // 2, HEIGHT // 2 + 200), recap, font=rf, fill=(200, 200, 255, 220))
+
+    return ImageClip(np.array(base)).with_duration(duration)
+
+
+def create_video(
+    script: dict,
+    audio_path: str,
+    output_path: str,
+    bg_images: list[str] | None = None,
+) -> str:
+    """
+    bg_images: user-supplied image paths (used as backgrounds instead of AI generation).
+               If None, gpt-image-1 generates backgrounds per scene.
+    """
     audio = AudioFileClip(audio_path)
     total_duration = audio.duration
 
     points = script["points"]
-    title_duration = 3.5
-    point_duration = (total_duration - title_duration) / len(points)
+    title_dur = 3.5
+    outro_dur = 2.5
+    point_dur = (total_duration - title_dur - outro_dur) / len(points)
 
-    keywords = script.get("keywords", ["news breaking", "world event", "technology", "science", "future"])
-    while len(keywords) < len(points) + 1:
-        keywords.append(keywords[-1])
+    # Segment list: (duration, type, index_or_label)
+    segments = (
+        [(title_dur, "title", None)]
+        + [(point_dur, "point", i) for i in range(len(points))]
+        + [(outro_dur, "outro", None)]
+    )
 
-    segments = [
-        (title_duration, "title", keywords[0]),
-        *[(point_duration, i, keywords[i + 1]) for i in range(len(points))]
-    ]
+    # Build backgrounds
+    scene_prompts = [script["title"]] + points + [script["title"]]
+    generated_paths = []
 
     clips = []
-
-    for seg_idx, (seg_duration, seg_type, keyword) in enumerate(segments):
-        bg_path = f"{settings.output_dir}/bg_{seg_idx}.mp4"
-        has_bg = _fetch_pexels_video(keyword, bg_path)
-
-        if has_bg:
-            bg = _make_bg_clip(bg_path, seg_duration)
+    for seg_idx, (seg_dur, seg_type, seg_idx_val) in enumerate(segments):
+        # --- Background ---
+        if bg_images:
+            img_src = bg_images[seg_idx % len(bg_images)]
+            bg = _make_bg_from_image(img_src, seg_dur)
         else:
-            bg = _make_fallback_bg(seg_duration)
+            gen_path = f"{settings.output_dir}/scene_{seg_idx}.png"
+            ok = _generate_scene_image(scene_prompts[seg_idx], gen_path)
+            if ok:
+                generated_paths.append(gen_path)
+                bg = _make_bg_from_image(gen_path, seg_dur)
+            else:
+                bg = _make_fallback_bg(seg_dur)
 
+        # --- Overlay ---
         if seg_type == "title":
-            overlay = _make_title_overlay(script["title"], script["hook"], seg_duration)
+            overlay = _make_title_overlay(script["title"], script["hook"], seg_dur)
+        elif seg_type == "point":
+            overlay = _make_point_overlay(seg_idx_val, len(points), points[seg_idx_val], seg_dur)
         else:
-            overlay = _make_point_overlay(seg_type, len(points), points[seg_type], seg_duration)
+            overlay = _make_outro_overlay(script["title"], seg_dur)
 
-        segment = CompositeVideoClip([bg, overlay])
-        clips.append(segment)
+        clips.append(CompositeVideoClip([bg, overlay]))
 
-    video = concatenate_videoclips(clips)
-    video = video.with_audio(audio)
+    video = concatenate_videoclips(clips).with_audio(audio)
     video.write_videofile(output_path, fps=30, codec="libx264", audio_codec="aac", logger=None)
 
-    for i in range(len(segments)):
-        bg_path = f"{settings.output_dir}/bg_{i}.mp4"
-        if os.path.exists(bg_path):
-            os.remove(bg_path)
+    for p in generated_paths:
+        if os.path.exists(p):
+            os.remove(p)
 
     return output_path

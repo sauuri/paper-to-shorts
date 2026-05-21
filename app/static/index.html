@@ -5,279 +5,458 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Paper to Shorts</title>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #0f0f19;
-      color: #fff;
+      background: #0a0a14;
+      color: #e2e2f0;
       min-height: 100vh;
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: center;
-      padding: 40px 20px;
+      padding: 48px 20px 80px;
     }
 
-    h1 { font-size: 28px; font-weight: 700; margin-bottom: 8px; }
-    p.sub { color: #888; font-size: 14px; margin-bottom: 40px; }
+    .header { text-align: center; margin-bottom: 36px; }
+    .header h1 { font-size: 30px; font-weight: 800; letter-spacing: -0.5px; }
+    .header h1 span { color: #6366f1; }
+    .header p { color: #666; font-size: 14px; margin-top: 8px; line-height: 1.6; }
 
     .card {
-      background: #1a1a2e;
-      border-radius: 16px;
-      padding: 32px;
+      background: #13131f;
+      border: 1px solid #1e1e30;
+      border-radius: 20px;
+      padding: 28px;
       width: 100%;
-      max-width: 560px;
+      max-width: 580px;
     }
 
+    /* Tabs */
+    .tabs { display: flex; gap: 6px; margin-bottom: 24px; background: #0a0a14; border-radius: 10px; padding: 4px; }
+    .tab {
+      flex: 1; padding: 9px 8px; background: transparent;
+      border: none; border-radius: 8px; color: #666;
+      font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.18s;
+    }
+    .tab.active { background: #1e1e35; color: #fff; }
+
+    /* Upload area */
     .upload-area {
-      border: 2px dashed #3a3a5c;
-      border-radius: 12px;
-      padding: 40px;
-      text-align: center;
-      cursor: pointer;
-      transition: border-color 0.2s;
-      margin-bottom: 20px;
+      border: 1.5px dashed #2a2a45;
+      border-radius: 12px; padding: 36px 20px;
+      text-align: center; cursor: pointer;
+      transition: all 0.18s; margin-bottom: 16px;
     }
-
-    .tabs { display: flex; gap: 8px; margin-bottom: 20px; }
-    .tab { flex: 1; padding: 10px; background: #0f0f19; border: 1.5px solid #3a3a5c; border-radius: 8px; color: #888; font-size: 14px; cursor: pointer; transition: all 0.2s; }
-    .tab.active { border-color: #6366f1; color: #fff; background: #1e1e3a; }
-
-    #url-input { width: 100%; padding: 14px 16px; background: #0f0f19; border: 1.5px solid #3a3a5c; border-radius: 10px; color: #fff; font-size: 14px; outline: none; margin-bottom: 20px; }
-    #url-input:focus { border-color: #6366f1; }
-    #url-input::placeholder { color: #555; }
-
-    .upload-area:hover { border-color: #6366f1; }
-    .upload-area.dragover { border-color: #6366f1; background: #1e1e3a; }
-
-    .upload-icon { font-size: 40px; margin-bottom: 12px; }
-    .upload-text { color: #888; font-size: 14px; }
+    .upload-area:hover, .upload-area.dragover { border-color: #6366f1; background: #15153a; }
+    .upload-icon { font-size: 36px; margin-bottom: 10px; }
+    .upload-text { color: #666; font-size: 14px; }
     .upload-text span { color: #6366f1; }
+    .file-name { margin-top: 10px; font-size: 13px; color: #6366f1; }
 
-    #file-name { margin-top: 10px; font-size: 13px; color: #6366f1; }
-
-    button {
-      width: 100%;
-      padding: 14px;
-      background: #6366f1;
-      color: #fff;
-      border: none;
-      border-radius: 10px;
-      font-size: 15px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: opacity 0.2s;
+    /* Inputs */
+    input[type="text"], input[type="url"], textarea {
+      width: 100%; padding: 13px 15px;
+      background: #0a0a14; border: 1.5px solid #1e1e30;
+      border-radius: 10px; color: #e2e2f0; font-size: 14px;
+      outline: none; transition: border-color 0.18s; font-family: inherit;
     }
+    input[type="text"]:focus, input[type="url"]:focus, textarea:focus { border-color: #6366f1; }
+    input::placeholder, textarea::placeholder { color: #444; }
+    textarea { resize: vertical; min-height: 72px; line-height: 1.5; }
 
-    button:disabled { opacity: 0.4; cursor: not-allowed; }
-    button:hover:not(:disabled) { opacity: 0.85; }
+    .field-label { font-size: 12px; color: #666; margin-bottom: 6px; margin-top: 16px; letter-spacing: 0.3px; }
 
-    .progress {
-      display: none;
-      margin-top: 20px;
-      text-align: center;
-      color: #888;
-      font-size: 14px;
+    /* Save path */
+    .save-row { display: flex; gap: 8px; align-items: center; margin-top: 16px; }
+    .save-row input { flex: 1; }
+    .save-hint { font-size: 11px; color: #444; margin-top: 5px; }
+
+    /* Generate button */
+    .gen-btn {
+      width: 100%; padding: 14px;
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      color: #fff; border: none; border-radius: 10px;
+      font-size: 15px; font-weight: 700; cursor: pointer;
+      transition: opacity 0.18s; margin-top: 20px; letter-spacing: 0.2px;
     }
+    .gen-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+    .gen-btn:hover:not(:disabled) { opacity: 0.88; }
 
+    /* Progress */
+    .progress { display: none; margin-top: 22px; }
+    .prog-steps { display: flex; flex-direction: column; gap: 10px; }
+    .step {
+      display: flex; align-items: center; gap: 12px;
+      padding: 12px 14px; border-radius: 10px;
+      background: #0f0f1e; border: 1px solid #1e1e30;
+      font-size: 13px; color: #666; transition: all 0.3s;
+    }
+    .step.active { border-color: #6366f1; color: #e2e2f0; background: #15153a; }
+    .step.done { border-color: #22c55e44; color: #22c55e; background: #0f1e14; }
+    .step-icon { font-size: 18px; width: 24px; text-align: center; flex-shrink: 0; }
     .spinner {
-      display: inline-block;
-      width: 20px; height: 20px;
-      border: 2px solid #3a3a5c;
-      border-top-color: #6366f1;
-      border-radius: 50%;
-      animation: spin 0.8s linear infinite;
-      margin-right: 8px;
-      vertical-align: middle;
+      display: inline-block; width: 18px; height: 18px;
+      border: 2px solid #2a2a45; border-top-color: #6366f1;
+      border-radius: 50%; animation: spin 0.7s linear infinite; flex-shrink: 0;
     }
-
     @keyframes spin { to { transform: rotate(360deg); } }
 
+    /* Result */
     .result { display: none; margin-top: 24px; }
+    .section-title { font-size: 11px; color: #666; letter-spacing: 0.5px; margin-bottom: 8px; text-transform: uppercase; }
+    .info-box {
+      background: #0f0f1e; border: 1px solid #1e1e30;
+      border-radius: 10px; padding: 14px 16px;
+      margin-bottom: 12px; font-size: 13px; line-height: 1.7; color: #ccc;
+    }
+    .info-box h4 { color: #fff; font-size: 15px; font-weight: 700; margin-bottom: 6px; }
+    .point { padding: 3px 0; color: #bbb; }
+    .point::before { content: "▸ "; color: #6366f1; }
 
-    .script-box {
-      background: #0f0f19;
-      border-radius: 10px;
-      padding: 16px;
-      margin-bottom: 16px;
-      font-size: 13px;
-      line-height: 1.7;
+    video { width: 100%; border-radius: 12px; margin-top: 12px; background: #000; max-height: 420px; }
+
+    .action-row { display: flex; gap: 10px; margin-top: 12px; }
+    .dl-btn {
+      flex: 1; padding: 11px; background: #22c55e;
+      color: #fff; border: none; border-radius: 9px;
+      font-size: 14px; font-weight: 600; cursor: pointer; text-align: center;
+      text-decoration: none; display: block;
+    }
+    .dl-btn:hover { opacity: 0.88; }
+
+    .saved-path {
+      margin-top: 10px; padding: 10px 14px;
+      background: #0d1a10; border: 1px solid #22c55e44;
+      border-radius: 8px; font-size: 12px; color: #22c55e;
+      word-break: break-all;
     }
 
-    .script-box h3 { color: #6366f1; margin-bottom: 8px; font-size: 14px; }
-    .point { padding: 4px 0; color: #ccc; }
-    .point::before { content: "• "; color: #6366f1; }
-
-    video {
-      width: 100%;
-      border-radius: 10px;
-      margin-top: 12px;
-      background: #000;
-    }
-
-    .download-btn {
-      margin-top: 10px;
-      background: #22c55e;
-      font-size: 14px;
-      padding: 10px;
+    /* Image preview grid */
+    .img-preview { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+    .img-thumb {
+      width: 72px; height: 72px; object-fit: cover;
+      border-radius: 8px; border: 1.5px solid #2a2a45;
     }
   </style>
 </head>
 <body>
-  <h1>Paper to Shorts</h1>
-  <p class="sub">논문 PDF 또는 뉴스 기사 URL로 유튜브 숏츠를 자동 생성합니다</p>
 
-  <div class="card">
-    <div class="tabs">
-      <button class="tab active" data-tab="pdf">📄 PDF 업로드</button>
-      <button class="tab" data-tab="url">🔗 URL 입력</button>
+<div class="header">
+  <h1>Paper to <span>Shorts</span></h1>
+  <p>논문·뉴스·이미지 → AI 스크립트 → TTS → 유튜브 숏츠 자동 생성</p>
+</div>
+
+<div class="card">
+  <div class="tabs">
+    <button class="tab active" data-tab="pdf">📄 PDF</button>
+    <button class="tab" data-tab="url">🔗 URL</button>
+    <button class="tab" data-tab="images">🖼️ 이미지</button>
+  </div>
+
+  <!-- PDF Tab -->
+  <div id="tab-pdf">
+    <div class="upload-area" id="drop-zone-pdf">
+      <div class="upload-icon">📄</div>
+      <div class="upload-text"><span>PDF 파일 선택</span> 또는 드래그&드롭</div>
+      <div class="file-name" id="pdf-name"></div>
     </div>
+    <input type="file" id="file-input" accept=".pdf" style="display:none" />
+  </div>
 
-    <div id="tab-pdf">
-      <div class="upload-area" id="drop-zone">
-        <div class="upload-icon">📄</div>
-        <div class="upload-text"><span>PDF 파일 선택</span> 또는 드래그&드롭</div>
-        <div id="file-name"></div>
-      </div>
-      <input type="file" id="file-input" accept=".pdf" style="display:none" />
+  <!-- URL Tab -->
+  <div id="tab-url" style="display:none">
+    <div class="field-label">기사 / 블로그 URL</div>
+    <input id="url-input" type="url" placeholder="https://news.naver.com/..." />
+  </div>
+
+  <!-- Images Tab -->
+  <div id="tab-images" style="display:none">
+    <div class="upload-area" id="drop-zone-img">
+      <div class="upload-icon">🖼️</div>
+      <div class="upload-text"><span>이미지 선택</span> (최대 5장, JPG·PNG·WebP)</div>
+      <div class="file-name" id="img-count"></div>
     </div>
+    <input type="file" id="img-input" accept=".jpg,.jpeg,.png,.webp" multiple style="display:none" />
+    <div class="img-preview" id="img-preview"></div>
+    <div class="field-label">주제 / 설명 (선택)</div>
+    <textarea id="caption-input" placeholder="이미지와 관련된 설명이나 만들고 싶은 영상 주제를 입력하세요..."></textarea>
+  </div>
 
-    <div id="tab-url" style="display:none">
-      <input id="url-input" type="url" placeholder="https://news.naver.com/..." />
-    </div>
+  <!-- Save path -->
+  <div class="field-label">저장 경로 (선택)</div>
+  <input id="save-dir" type="text" placeholder="예: ~/Desktop 또는 /Users/jhlee/Downloads" />
+  <div class="save-hint">비워두면 서버 output/ 폴더에만 저장됩니다</div>
 
-    <button id="generate-btn" disabled>숏츠 생성하기</button>
+  <button class="gen-btn" id="generate-btn" disabled>숏츠 생성하기</button>
 
-    <div class="progress" id="progress">
-      <span class="spinner"></span>
-      <span id="progress-text">스크립트 생성 중...</span>
-    </div>
-
-    <div class="result" id="result">
-      <div class="script-box">
-        <h3>제목</h3>
-        <div id="res-title"></div>
+  <!-- Progress -->
+  <div class="progress" id="progress">
+    <div class="prog-steps">
+      <div class="step" id="step-script">
+        <span class="step-icon">✍️</span>
+        <span>AI 스크립트 생성 중...</span>
       </div>
-      <div class="script-box">
-        <h3>핵심 포인트</h3>
-        <div id="res-points"></div>
+      <div class="step" id="step-tts">
+        <span class="step-icon">🎙️</span>
+        <span>음성 합성 중...</span>
       </div>
-      <div class="script-box">
-        <h3>나레이션</h3>
-        <div id="res-narration"></div>
+      <div class="step" id="step-img">
+        <span class="step-icon">🎨</span>
+        <span id="step-img-text">AI 배경 이미지 생성 중... (장면별 약 10초)</span>
       </div>
-      <video id="res-video" controls></video>
-      <a id="download-link" download>
-        <button class="download-btn">⬇ 영상 다운로드</button>
-      </a>
+      <div class="step" id="step-video">
+        <span class="step-icon">🎬</span>
+        <span>영상 렌더링 중...</span>
+      </div>
     </div>
   </div>
 
-  <script>
-    const dropZone = document.getElementById("drop-zone");
-    const fileInput = document.getElementById("file-input");
-    const fileName = document.getElementById("file-name");
-    const generateBtn = document.getElementById("generate-btn");
-    const progress = document.getElementById("progress");
-    const progressText = document.getElementById("progress-text");
-    const result = document.getElementById("result");
-    const urlInput = document.getElementById("url-input");
+  <!-- Result -->
+  <div class="result" id="result">
+    <div class="section-title">생성 결과</div>
+    <div class="info-box">
+      <h4 id="res-title"></h4>
+      <div id="res-points"></div>
+    </div>
+    <div class="info-box">
+      <div style="font-size:11px;color:#666;margin-bottom:6px;">나레이션</div>
+      <div id="res-narration"></div>
+    </div>
+    <video id="res-video" controls playsinline></video>
+    <div class="action-row">
+      <a id="download-link" class="dl-btn" download>⬇ 다운로드</a>
+    </div>
+    <div class="saved-path" id="saved-path" style="display:none"></div>
+  </div>
+</div>
 
-    let selectedFile = null;
-    let activeTab = "pdf";
+<script>
+  const genBtn = document.getElementById("generate-btn");
+  const progress = document.getElementById("progress");
+  const result = document.getElementById("result");
+  let activeTab = "pdf";
+  let selectedFile = null;
+  let selectedImages = [];
 
-    document.querySelectorAll(".tab").forEach(tab => {
-      tab.addEventListener("click", () => {
-        activeTab = tab.dataset.tab;
-        document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
-        tab.classList.add("active");
-        document.getElementById("tab-pdf").style.display = activeTab === "pdf" ? "block" : "none";
-        document.getElementById("tab-url").style.display = activeTab === "url" ? "block" : "none";
-        generateBtn.disabled = activeTab === "pdf" ? !selectedFile : false;
-      });
+  // Tab switching
+  document.querySelectorAll(".tab").forEach(tab => {
+    tab.addEventListener("click", () => {
+      activeTab = tab.dataset.tab;
+      document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+      tab.classList.add("active");
+      ["pdf", "url", "images"].forEach(t =>
+        document.getElementById(`tab-${t}`).style.display = t === activeTab ? "block" : "none"
+      );
+      updateBtnState();
     });
+  });
 
-    dropZone.addEventListener("click", () => fileInput.click());
-    dropZone.addEventListener("dragover", e => { e.preventDefault(); dropZone.classList.add("dragover"); });
-    dropZone.addEventListener("dragleave", () => dropZone.classList.remove("dragover"));
-    dropZone.addEventListener("drop", e => {
-      e.preventDefault();
-      dropZone.classList.remove("dragover");
-      const file = e.dataTransfer.files[0];
-      if (file?.name.endsWith(".pdf")) setFile(file);
+  function updateBtnState() {
+    if (activeTab === "pdf") genBtn.disabled = !selectedFile;
+    else if (activeTab === "url") genBtn.disabled = !document.getElementById("url-input").value.trim();
+    else genBtn.disabled = selectedImages.length === 0;
+  }
+
+  document.getElementById("url-input").addEventListener("input", updateBtnState);
+
+  // PDF drag & drop
+  const pdfZone = document.getElementById("drop-zone-pdf");
+  const fileInput = document.getElementById("file-input");
+  pdfZone.addEventListener("click", () => fileInput.click());
+  pdfZone.addEventListener("dragover", e => { e.preventDefault(); pdfZone.classList.add("dragover"); });
+  pdfZone.addEventListener("dragleave", () => pdfZone.classList.remove("dragover"));
+  pdfZone.addEventListener("drop", e => {
+    e.preventDefault(); pdfZone.classList.remove("dragover");
+    const f = e.dataTransfer.files[0];
+    if (f?.name.toLowerCase().endsWith(".pdf")) setFile(f);
+  });
+  fileInput.addEventListener("change", () => { if (fileInput.files[0]) setFile(fileInput.files[0]); });
+  function setFile(f) {
+    selectedFile = f;
+    document.getElementById("pdf-name").textContent = f.name;
+    updateBtnState();
+  }
+
+  // Image drag & drop
+  const imgZone = document.getElementById("drop-zone-img");
+  const imgInput = document.getElementById("img-input");
+  imgZone.addEventListener("click", () => imgInput.click());
+  imgZone.addEventListener("dragover", e => { e.preventDefault(); imgZone.classList.add("dragover"); });
+  imgZone.addEventListener("dragleave", () => imgZone.classList.remove("dragover"));
+  imgZone.addEventListener("drop", e => {
+    e.preventDefault(); imgZone.classList.remove("dragover");
+    setImages(Array.from(e.dataTransfer.files));
+  });
+  imgInput.addEventListener("change", () => setImages(Array.from(imgInput.files)));
+
+  function setImages(files) {
+    const allowed = ["image/jpeg", "image/png", "image/webp"];
+    selectedImages = files.filter(f => allowed.includes(f.type)).slice(0, 5);
+    document.getElementById("img-count").textContent =
+      selectedImages.length ? `${selectedImages.length}장 선택됨` : "";
+
+    const preview = document.getElementById("img-preview");
+    preview.innerHTML = "";
+    selectedImages.forEach(f => {
+      const img = document.createElement("img");
+      img.className = "img-thumb";
+      img.src = URL.createObjectURL(f);
+      preview.appendChild(img);
     });
-    fileInput.addEventListener("change", () => { if (fileInput.files[0]) setFile(fileInput.files[0]); });
+    updateBtnState();
+  }
 
-    function setFile(file) {
-      selectedFile = file;
-      fileName.textContent = file.name;
-      generateBtn.disabled = false;
+  // Progress steps manager
+  const steps = ["step-script", "step-tts", "step-img", "step-video"];
+  let currentStep = 0;
+  let stepTimer;
+
+  function resetSteps() {
+    steps.forEach(id => {
+      const el = document.getElementById(id);
+      el.classList.remove("active", "done");
+      const icon = el.querySelector(".step-icon");
+      const spin = el.querySelector(".spinner");
+      if (spin) { spin.remove(); }
+      icon.style.display = "";
+    });
+    currentStep = 0;
+  }
+
+  function activateStep(idx) {
+    if (idx > 0) {
+      const prev = document.getElementById(steps[idx - 1]);
+      prev.classList.remove("active");
+      prev.classList.add("done");
+      const spin = prev.querySelector(".spinner");
+      if (spin) spin.remove();
+      prev.querySelector(".step-icon").textContent = "✅";
+      prev.querySelector(".step-icon").style.display = "";
     }
+    if (idx >= steps.length) return;
+    const el = document.getElementById(steps[idx]);
+    el.classList.add("active");
+    const icon = el.querySelector(".step-icon");
+    icon.style.display = "none";
+    const spinner = document.createElement("span");
+    spinner.className = "spinner";
+    el.insertBefore(spinner, el.firstChild);
+  }
 
-    const steps = ["스크립트 생성 중...", "음성 생성 중...", "영상 렌더링 중..."];
-    let stepIdx = 0;
-    let stepInterval;
+  // Update image step text based on tab
+  function updateImgStepText() {
+    document.getElementById("step-img-text").textContent =
+      activeTab === "images"
+        ? "이미지 분석 완료 (업로드 이미지 사용)"
+        : "AI 배경 이미지 생성 중... (장면별 약 10초)";
+  }
 
-    generateBtn.addEventListener("click", async () => {
-      generateBtn.disabled = true;
-      result.style.display = "none";
-      progress.style.display = "block";
+  // Auto-advance steps while waiting
+  function startStepTimer() {
+    activateStep(0);
+    const delays = [7000, 8000, activeTab === "images" ? 3000 : 70000, 15000];
+    let idx = 0;
 
-      stepIdx = 0;
-      progressText.textContent = steps[0];
-      stepInterval = setInterval(() => {
-        stepIdx = (stepIdx + 1) % steps.length;
-        progressText.textContent = steps[stepIdx];
-      }, 8000);
+    function next() {
+      idx++;
+      if (idx < steps.length) {
+        activateStep(idx);
+        stepTimer = setTimeout(next, delays[idx]);
+      }
+    }
+    stepTimer = setTimeout(next, delays[0]);
+  }
 
-      let res;
+  function finishSteps() {
+    clearTimeout(stepTimer);
+    for (let i = currentStep; i <= steps.length; i++) activateStep(steps.length);
+    steps.forEach(id => {
+      const el = document.getElementById(id);
+      const spin = el.querySelector(".spinner");
+      if (spin) spin.remove();
+      const icon = el.querySelector(".step-icon");
+      icon.style.display = "";
+      if (!el.classList.contains("done")) {
+        el.classList.add("done");
+        icon.textContent = "✅";
+      }
+    });
+  }
+
+  // Generate
+  genBtn.addEventListener("click", async () => {
+    genBtn.disabled = true;
+    result.style.display = "none";
+    progress.style.display = "block";
+    updateImgStepText();
+    resetSteps();
+    startStepTimer();
+
+    const saveDir = document.getElementById("save-dir").value.trim();
+    let res;
+
+    try {
       if (activeTab === "pdf") {
         if (!selectedFile) return;
-        const formData = new FormData();
-        formData.append("file", selectedFile);
-        res = await fetch("/generate/pdf", { method: "POST", body: formData });
+        const fd = new FormData();
+        fd.append("file", selectedFile);
+        fd.append("save_dir", saveDir);
+        res = await fetch("/generate/pdf", { method: "POST", body: fd });
+
+      } else if (activeTab === "url") {
+        const url = document.getElementById("url-input").value.trim();
+        const fd = new FormData();
+        fd.append("url", url);
+        fd.append("save_dir", saveDir);
+        res = await fetch("/generate/url", { method: "POST", body: fd });
+
       } else {
-        const url = urlInput.value.trim();
-        if (!url) { generateBtn.disabled = false; return; }
-        const formData = new FormData();
-        formData.append("url", url);
-        res = await fetch("/generate/url", { method: "POST", body: formData });
+        const fd = new FormData();
+        selectedImages.forEach(f => fd.append("files", f));
+        fd.append("caption", document.getElementById("caption-input").value);
+        fd.append("save_dir", saveDir);
+        res = await fetch("/generate/images", { method: "POST", body: fd });
       }
 
-      try {
-        const data = await res.json();
+      const data = await res.json();
+      finishSteps();
+      progress.style.display = "none";
 
-        clearInterval(stepInterval);
-        progress.style.display = "none";
-
-        if (!res.ok) {
-          alert(`오류: ${data.detail}`);
-          generateBtn.disabled = false;
-          return;
-        }
-
-        document.getElementById("res-title").textContent = data.script.title;
-        document.getElementById("res-points").innerHTML = data.script.points
-          .map(p => `<div class="point">${p}</div>`).join("");
-        document.getElementById("res-narration").textContent = data.script.narration;
-
-        const video = document.getElementById("res-video");
-        video.src = data.video_url;
-
-        const dl = document.getElementById("download-link");
-        dl.href = data.video_url;
-        dl.download = `${data.script.title}.mp4`;
-
-        result.style.display = "block";
-      } catch {
-        clearInterval(stepInterval);
-        progress.style.display = "none";
-        alert("서버 오류가 발생했습니다.");
+      if (!res.ok) {
+        alert(`오류: ${data.detail}`);
+        return;
       }
 
-      generateBtn.disabled = false;
-    });
-  </script>
+      document.getElementById("res-title").textContent = data.script.title;
+      document.getElementById("res-points").innerHTML =
+        data.script.points.map(p => `<div class="point">${p}</div>`).join("");
+      document.getElementById("res-narration").textContent = data.script.narration;
+
+      const video = document.getElementById("res-video");
+      video.src = data.video_url;
+
+      const dl = document.getElementById("download-link");
+      dl.href = data.video_url;
+      dl.download = `${data.script.title}.mp4`;
+
+      const sp = document.getElementById("saved-path");
+      if (data.saved_path) {
+        sp.textContent = `💾 저장됨: ${data.saved_path}`;
+        sp.style.display = "block";
+      } else {
+        sp.style.display = "none";
+      }
+
+      result.style.display = "block";
+    } catch (err) {
+      finishSteps();
+      progress.style.display = "none";
+      alert("서버 오류가 발생했습니다.");
+    } finally {
+      updateBtnState();
+    }
+  });
+</script>
 </body>
 </html>
